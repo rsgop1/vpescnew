@@ -1,0 +1,11 @@
+- [Vault-Pay Architecture](vault-pay-arch.md) — FastAPI+Bot on port 8000, React Vite admin on port 5000, PostgreSQL via DATABASE_URL; disputes are manual-only.
+- [Telegram caption vs text commands](telegram-caption-keyword-gotcha.md) — a keyword like "done" sent as a photo's caption is invisible to text-only handlers; check `msg.caption` too wherever a text keyword can plausibly arrive attached to media.
+- [Vault-Pay leaked-secrets cleanup](vault-pay-secrets-cleanup.md) — replit.md had a real bot token/password pasted in as leftover agent output; rotated via requestSecrets, removed hardcoded fallbacks from config.py.
+- [OpenRouter free-model gotchas](openrouter-free-models.md) — paid models 402 without credits; many `:free` models 429 upstream-rate-limit; use `/api/v1/models` to find a working free vision model before hardcoding one.
+- [Vault-Pay stray `telegram` pip package](vault-pay-telegram-pip-conflict.md) — an unrelated PyPI package literally named `telegram` shadows/corrupts `python-telegram-bot`'s import; must be purged and pyTB force-reinstalled.
+- [JWT-authed image rendering](jwt-authed-image-rendering.md) — a plain `<img src>` can't send a Bearer token; fetch as blob via the authed HTTP client and use an object URL instead.
+- [Vault-Pay agentic guardrails](vault-pay-agentic-guardrails.md) — abuse detection, auto-hold, identity risk checks: keep them rule-based/regex-first (cheap, per-message) and reserve LLM calls for one-shot generative helpers only.
+- [Telegram private-room pool](telegram-room-pool.md) — forum topics are not per-user private; reusable deal rooms need expected-user checks, cleanup verification, and quarantine on failure.
+- [Telegram middleman notifications](telegram-middleman-notification-escaping.md) — critical DM templates should use plain text or a MarkdownV2 fallback; dynamic deal data can make Telegram reject the whole message and button.
+- [Manual-middleman admin surface](manual-middleman-admin-surface.md) — active admin controls should center on deals, rooms, groups, users, and test-mode access; legacy wallet UI stays hidden.
+- [Manual room safety](manual-room-safety.md) — three-party confirmation, dispute freeze, preserved transcript, and admin-only decisions are required before auto-middleman work.

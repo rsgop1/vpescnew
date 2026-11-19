@@ -1,0 +1,8 @@
+{
+  "name": "Vault-Pay Admin Panel",
+  "description": "Production-oriented Telegram escrow management dashboard and god-mode admin panel for Vault-Pay.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
