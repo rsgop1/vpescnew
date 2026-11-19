@@ -8,3 +8,4 @@ python-multipart==0.0.9
 aiofiles==23.2.1
 httpx
 aiosqlite
+qrcode[pil]>=7.4,<9

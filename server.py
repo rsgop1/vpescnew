@@ -7,7 +7,8 @@ if os.path.isdir(_LIBS_DIR) and _LIBS_DIR not in sys.path:
     sys.path.insert(0, _LIBS_DIR)
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+import secrets
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -56,6 +57,25 @@ app.add_middleware(
 
 from admin_api import router as admin_router
 app.include_router(admin_router)
+
+@app.post("/internal/ltc-regtest/wallet-event", status_code=202)
+async def ltc_wallet_event(authorization: str = Header(default="")):
+    """Wake the watcher. Amounts and transaction state always come from Core RPC."""
+    from auto_ltc import enabled
+    from auto_ltc_bot import monitor
+    secret = os.environ.get("AUTO_LTC_NOTIFY_TOKEN", "")
+    if not enabled() or not secret:
+        raise HTTPException(404)
+    if not secrets.compare_digest(authorization.encode(), ("Bearer " + secret).encode()):
+        raise HTTPException(403)
+    bot_app = bot_module._bot_app
+    if not bot_app or not bot_app.running:
+        raise HTTPException(503, "Bot is starting")
+    name = "ltc-wallet-event"
+    if not bot_app.job_queue.get_jobs_by_name(name):
+        bot_app.job_queue.run_once(monitor, when=1, name=name)
+    return {"queued": True}
+
 
 @app.get("/api/health")
 async def health():

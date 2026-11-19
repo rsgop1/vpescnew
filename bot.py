@@ -22,6 +22,7 @@ from telegram.ext import (
 from telegram.error import BadRequest, Forbidden
 
 import db
+import auto_ltc
 from transcript_pdf import build_transcript_pdf
 from config import (
     TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_ID, TELEGRAM_CHANNEL_ID,
@@ -1541,17 +1542,14 @@ def build_draft_card(d: dict) -> tuple[str, InlineKeyboardMarkup | None]:
 
     # ── Step 6: Choose Middleman Option ──────────────────────────────────────
     if step == "mm_mode":
+        options = [("🛡️ Manual Middleman", "esc:mm_mode:manual")]
+        description = "A verified human moderator handles the private deal room."
+        if auto_ltc.enabled():
+            options.append(("🧪 Auto MM · LTC regtest", "esc:mm_mode:auto"))
+            description += "\nAuto MM uses test coins on a private Litecoin chain."
         return (
-            header + info + "\n\n"
-            "🛡️ *Step 6: Choose Middleman Option*\n"
-            "Select how this escrow deal will be moderated:\n\n"
-            "• *Manual Middleman:* Verified human moderator handles private deal room\n"
-            "• *Auto Middleman:* Automated instant bot escrow \\(direct routing\\)",
-            kb([
-                [("🛡️ Manual Middleman", "esc:mm_mode:manual"),
-                 ("🤖 Auto Middleman", "esc:mm_mode:auto")],
-                [("❌ Cancel", "esc:cancel")],
-            ])
+            header + info + "\n\n🛡️ *Step 6: Choose Middleman Option*\n" + esc(description),
+            kb([options, [("❌ Cancel", "esc:cancel")]]),
         )
 
     cp_role = "Seller" if role == "buyer" else "Buyer"
@@ -1687,6 +1685,10 @@ def build_deal_card(deal: dict, bot_username: str = "") -> tuple[str, InlineKeyb
 async def finalize_deal(context, d: dict, group_msg):
     """Save deal to DB, edit group card, DM both parties."""
     try:
+        if d.get("mm_type") == "auto":
+            from auto_ltc_bot import create_draft
+            await create_draft(context, d, group_msg)
+            return
         fee_pct = await get_fee_pct()
         payment_method = "middleman"
 
@@ -1843,6 +1845,22 @@ async def cmd_escrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     DRAFT.pop(user.id, None)
 
     default_toc = (await get_default_toc())[:50]
+    if context.args and context.args[0].lower() == "ltc":
+        if not auto_ltc.enabled():
+            await msg.reply_text("The Litecoin regtest sandbox is disabled.")
+            return
+        other = msg.reply_to_message.from_user if msg.reply_to_message else None
+        product = " ".join(context.args[1:]).strip()
+        if not other or other.is_bot or other.id == user.id or not product:
+            await msg.reply_text("Reply to the seller's message with /escrow ltc PRODUCT to open a private test deal.")
+            return
+        from auto_ltc_bot import create_draft
+        public_card = await msg.reply_text("Reserving a private regtest deal room…")
+        await create_draft(context, {"role": "buyer", "initiator_id": user.id,
+            "counterparty_id": other.id, "product_name": product[:120], "amount": None,
+            "fee_payer": "seller", "toc": "Seller delivers before buyer releases the test payment."}, public_card)
+        return
+
     d = {
         "step": "role",
         "initiator_id": user.id,
@@ -1895,7 +1913,7 @@ async def handle_escrow_cb(q, context, parts, user):
         # Must be the mentioned counterparty
         cp_un = d.get("counterparty_un", "").lower().lstrip("@")
         clicker_un = (user.username or "").lower()
-        if clicker_un and cp_un and clicker_un != cp_un:
+        if not cp_un or clicker_un != cp_un or user.id == initiator_id:
             await qans(q, f"⛔ Only @{d['counterparty_un']} can accept this deal.", alert=True)
             return
         # Set counterparty ID now that we know it
@@ -4065,6 +4083,10 @@ async def cmd_register_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Run /registerroom inside a private group room.")
         return
 
+    if chat.id in auto_ltc.rooms():
+        await update.message.reply_text("This room is reserved for Litecoin sandbox deals.")
+        return
+
     # Authorized if TELEGRAM_ADMIN_ID, registered middleman, or administrator/creator of the group
     is_auth = (user.id == TELEGRAM_ADMIN_ID) or await db.is_middleman(user.id)
     if not is_auth:
@@ -4991,6 +5013,10 @@ async def start_bot():
         .build()
     )
     app = _bot_app
+
+    if auto_ltc.enabled():
+        from auto_ltc_bot import register
+        await register(app)
 
     # Commands
     app.add_handler(CommandHandler("start", cmd_start))
